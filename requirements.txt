@@ -1,0 +1,14 @@
+PyQt6>=6.4.0
+requests>=2.31.0
+xmind>=1.2.0
+python-markdown>=0.1.0
+beautifulsoup4>=4.12.0
+lark-oapi>=1.0.0
+selenium>=4.15.0
+openai>=1.0.0
+python-docx>=0.8.11    # Word .docx
+pdfplumber>=0.9.0      # PDF（推荐，效果好）
+PyMuPDF>=1.23.0        # PDF（备选，fitz）
+pdfplumber>=0.10.0      # 首选 - 表格和布局
+PyMuPDF>=1.23.0         # 备选 - 文本定位和原型检测
+PyPDF2>=3.0.0           # 保底 - 纯文本

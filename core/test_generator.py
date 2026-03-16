@@ -1,0 +1,83 @@
+from typing import Iterator, Optional
+from core.analyzer import RequirementAnalyzer
+from document_fetchers.local_fetcher import LocalDocumentFetcher
+from document_fetchers.lanhu_fetcher import LanhuFetcher  # 新的蓝湖获取
+
+
+class TestPointGenerator:
+    def __init__(self, ai_client, analyzer: Optional[RequirementAnalyzer] = None):
+        self.ai_client = ai_client
+        self.analyzer = analyzer or RequirementAnalyzer()
+        self.req_fetcher = LocalDocumentFetcher()  # 需求文档读取器
+        self.prd_fetcher = LanhuFetcher()  # PRD读取器（支持蓝湖URL/本地文件/文本）
+
+    def generate(self, requirement: str, prd: str, stream: bool = True) -> Iterator[str]:
+        """生成测试点"""
+        # 1. 获取文档内容
+        self._emit_progress("正在读取需求文档...")
+        req_content = self._get_requirement_content(requirement)
+
+        self._emit_progress("正在读取PRD文档...")
+        prd_content = self._get_prd_content(prd)
+
+        # 2. 预分析
+        self._emit_progress("正在分析文档结构...")
+        analysis = self.analyzer.analyze(req_content, prd_content)
+
+        # 3. 构建增强提示
+        enhanced_prompt = self._build_enhanced_prompt(req_content, prd_content, analysis)
+
+        # 4. 调用AI生成
+        self._emit_progress("正在生成测试点...")
+        if stream:
+            yield from self.ai_client.generate_test_points(enhanced_prompt, "")
+        else:
+            result = "".join(self.ai_client.generate_test_points(enhanced_prompt, ""))
+            yield result
+
+    def _emit_progress(self, message: str):
+        """发送进度消息（供子类重写或使用回调）"""
+        print(message)  # 默认打印，GUI中会覆盖
+
+    def _get_requirement_content(self, source: str) -> str:
+        """获取需求文档内容（本地文件或纯文本）"""
+        source = source.strip()
+        if not source:
+            return ""
+
+        # 判断是文件路径还是纯文本
+        if self.req_fetcher._is_text_content(source):
+            return source
+
+        try:
+            return self.req_fetcher.fetch(source)
+        except Exception as e:
+            print(f"警告：读取需求文档失败({e})，作为纯文本处理")
+            return source
+
+    def _get_prd_content(self, source: str) -> str:
+        """获取PRD内容（蓝湖URL、本地文件或纯文本）"""
+        source = source.strip()
+        if not source:
+            return ""
+
+        # 使用蓝湖获取器（自动判断类型）
+        try:
+            return self.prd_fetcher.fetch(source)
+        except Exception as e:
+            print(f"警告：读取PRD失败({e})，作为纯文本处理")
+            return source
+
+    def _build_enhanced_prompt(self, req: str, prd: str, analysis: dict) -> str:
+        """构建增强提示"""
+        context = f"""
+预分析结果：
+- 识别到 {len(analysis.get('modules', []))} 个功能模块
+- 发现 {len(analysis.get('user_stories', []))} 个用户故事  
+- 提取到 {len(analysis.get('business_rules', []))} 条业务规则
+- 识别到 {len(analysis.get('ui_components', []))} 个UI组件
+- 风险提醒: {', '.join(analysis.get('risk_areas', [])) or '无'}
+
+请基于以上上下文生成更精准的测试点。
+"""
+        return f"{context}\n\n需求文档：\n{req}\n\nPRD文档：\n{prd}"
