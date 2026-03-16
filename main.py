@@ -2,6 +2,8 @@ import sys
 import threading
 import webbrowser
 from pathlib import Path
+from typing import List
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QTextEdit, QComboBox,
@@ -14,6 +16,7 @@ from PyQt6.QtGui import QFont, QColor, QPalette
 from config import Config
 from core.test_generator import TestPointGenerator
 from core.analyzer import RequirementAnalyzer
+from document_fetchers.reference_fetcher import ReferenceFetcher
 from exporters.xmind_exporter import XMindExporter
 from exporters.markdown_exporter import MarkdownExporter
 from document_fetchers.local_fetcher import LocalDocumentFetcher
@@ -88,16 +91,50 @@ class TestPointGeneratorApp(QMainWindow):
         self.apply_styles()
 
     def init_ui(self):
-        """初始化UI"""
-        self.setWindowTitle("测试点生成器 v1.0")
+        """初始化UI - 添加滚动支持"""
+        self.setWindowTitle("测试点生成器 v1.3")
         self.setGeometry(100, 100, 1400, 900)
 
-        # 中央部件
+        # ===== 创建滚动区域（新增）=====
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)  # 关键：允许内容自适应大小
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # 禁用水平滚动条
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)  # 按需显示垂直滚动条
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: #f5f5f5;
+            }
+            QScrollBar:vertical {
+                background-color: #f0f0f0;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #c0c0c0;
+                border-radius: 6px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #a0a0a0;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
+
+        # ===== 中央部件（内容容器）=====
         central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+        scroll_area.setWidget(central_widget)  # 将内容部件放入滚动区域
+
+        # 设置主窗口的中央部件为滚动区域
+        self.setCentralWidget(scroll_area)
+
+        # ===== 主布局 =====
         main_layout = QVBoxLayout(central_widget)
         main_layout.setSpacing(20)
         main_layout.setContentsMargins(25, 25, 25, 25)
+        main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # 内容顶部对齐
 
         # ===== 配置区域 =====
         config_group = self._create_config_group()
@@ -110,6 +147,10 @@ class TestPointGeneratorApp(QMainWindow):
         # ===== 操作按钮区域 =====
         button_layout = self._create_button_layout()
         main_layout.addLayout(button_layout)
+
+        # ===== 参考示例区域（新增）=====
+        reference_group = self._create_reference_group()
+        main_layout.addWidget(reference_group, stretch=1)
 
         # ===== 进度条 =====
         self.progress_bar = QProgressBar()
@@ -137,9 +178,13 @@ class TestPointGeneratorApp(QMainWindow):
         result_group = self._create_result_group()
         main_layout.addWidget(result_group, stretch=4)
 
+        # 添加底部弹簧（可选，让内容紧凑顶部）
+        # main_layout.addStretch()
+
         # 状态栏
         self.statusBar().showMessage("就绪 - 请选择文档或粘贴内容开始")
         self.statusBar().setStyleSheet("color: #000; font-size: 12px;")
+
 
     def _create_config_group(self) -> QGroupBox:
         """创建配置区域"""
@@ -382,10 +427,10 @@ class TestPointGeneratorApp(QMainWindow):
         if provider == "siliconflow":
             # 硅基流动模型列表
             models = [
-                ("deepseek-ai/DeepSeek-R1-Distill-Qwen-32B", "DeepSeek-V3（可能需权限）"),
+                ("deepseek-ai/DeepSeek-R1-Distill-Qwen-32B", "DeepSeek-R1-Distill-Qwen-32B（可能需权限）"),
                 ("Qwen/Qwen2.5-72B-Instruct", "通义千问2.5-72B（推荐，最稳定）"),
                 ("Qwen/Qwen2.5-32B-Instruct", "通义千问2.5-32B"),
-                ("THUDM/GLM-Z1-32B-0414", "智谱GLM-4-9B"),
+                ("THUDM/GLM-Z1-32B-0414", "智谱GLM-Z1-32B-0414"),
                 ("01-ai/Yi-1.5-34B-Chat", "零一万物Yi-1.5-34B"),
             ]
         elif provider == "openrouter":
@@ -421,7 +466,7 @@ class TestPointGeneratorApp(QMainWindow):
         print(f"切换到平台: {provider}, 可用模型: {len(models)}个")
 
     def _create_input_group(self) -> QGroupBox:
-        """创建输入区域"""
+        """创建输入区域 - 支持多文件PRD"""
         group = QGroupBox("📂 文档输入（支持本地文件或直接粘贴）")
         group.setStyleSheet("""
             QGroupBox {
@@ -546,14 +591,14 @@ class TestPointGeneratorApp(QMainWindow):
         req_hint.setStyleSheet("color: #5D4037; font-size: 11px; font-weight: bold;")
         req_layout.addWidget(req_hint)
 
-        # ===== PRD文档区域 =====
+        # ===== PRD文档区域（修改为多文件支持）=====
         prd_widget = QWidget()
         prd_widget.setStyleSheet("background-color: #E8F5E9; border-radius: 8px;")
         prd_layout = QVBoxLayout(prd_widget)
         prd_layout.setContentsMargins(15, 15, 15, 15)
         prd_layout.setSpacing(12)
 
-        # 文件选择
+        # 文件选择 - 改为支持多文件
         prd_file_layout = QHBoxLayout()
         prd_file_layout.setSpacing(10)
 
@@ -562,7 +607,7 @@ class TestPointGeneratorApp(QMainWindow):
         prd_file_layout.addWidget(prd_label)
 
         self.prd_path_input = QLineEdit()
-        self.prd_path_input.setPlaceholderText("点击浏览选择文件，或输入路径...")
+        self.prd_path_input.setPlaceholderText("点击浏览选择文件，或输入路径（多文件用分号分隔）...")
         self.prd_path_input.setMinimumHeight(32)
         self.prd_path_input.setStyleSheet("""
             QLineEdit {
@@ -594,10 +639,16 @@ class TestPointGeneratorApp(QMainWindow):
                 background-color: #388E3C;
             }
         """)
-        self.prd_browse_btn.clicked.connect(lambda: self.browse_file(self.prd_path_input))
+        # 修改为调用多文件浏览
+        self.prd_browse_btn.clicked.connect(self.browse_prd_files)
         prd_file_layout.addWidget(self.prd_browse_btn)
 
         prd_layout.addLayout(prd_file_layout)
+
+        # 添加多文件提示
+        prd_multi_hint = QLabel("💡 支持多文件：可一次选择多个PRD，自动合并处理")
+        prd_multi_hint.setStyleSheet("color: #2E7D32; font-size: 11px; font-weight: bold;")
+        prd_layout.addWidget(prd_multi_hint)
 
         # 文本输入标签
         prd_text_label = QLabel("或直接粘贴内容：")
@@ -609,7 +660,8 @@ class TestPointGeneratorApp(QMainWindow):
         self.prd_text.setPlaceholderText(
             "在此粘贴PRD文档内容...\n"
             "产品设计文档、原型说明、交互稿等\n"
-            "支持Markdown、纯文本、Word、PDF等"
+            "支持Markdown、纯文本、Word、PDF等\n"
+            "如果上方选择了文件，此处内容将被忽略"
         )
         self.prd_text.setFont(font)
         self.prd_text.setStyleSheet("""
@@ -630,7 +682,7 @@ class TestPointGeneratorApp(QMainWindow):
         prd_layout.addWidget(self.prd_text)
 
         # 格式提示
-        prd_hint = QLabel("💡 支持格式：.md .txt .docx .pdf .doc .html | 文件路径或纯文本")
+        prd_hint = QLabel("💡 支持格式：.md .txt .docx .pdf .xmind | 多文件用分号(;)分隔")
         prd_hint.setStyleSheet("color: #1B5E20; font-size: 11px; font-weight: bold;")
         prd_layout.addWidget(prd_hint)
 
@@ -642,6 +694,19 @@ class TestPointGeneratorApp(QMainWindow):
         layout.addWidget(splitter)
         group.setLayout(layout)
         return group
+
+    def browse_prd_files(self):
+        """浏览多个PRD文件"""
+        file_paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "选择PRD文档（可多选）",
+            str(Path.home()),
+            "PRD文档 (*.pdf *.docx *.md *.txt *.xmind);;所有文件 (*.*)"
+        )
+        if file_paths:
+            self.prd_path_input.setText('; '.join(file_paths))
+            self.statusBar().showMessage(f"已选择 {len(file_paths)} 个PRD文件", 3000)
+
 
     def _create_button_layout(self) -> QHBoxLayout:
         """创建操作按钮布局"""
@@ -760,6 +825,204 @@ class TestPointGeneratorApp(QMainWindow):
         layout.addStretch()
         return layout
 
+    def _create_reference_group(self) -> QGroupBox:
+        """创建历史测试点参考区域"""
+        group = QGroupBox("📚 历史测试点参考（可选）- 让AI学习你的写作风格")
+        group.setCheckable(True)  # 可折叠
+        group.setChecked(False)
+        group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 14px;
+                color: #000;
+                border: 3px solid #607D8B;
+                border-radius: 10px;
+                margin-top: 15px;
+                padding-top: 15px;
+                padding-bottom: 15px;
+                padding-left: 20px;
+                padding-right: 20px;
+                background-color: #ECEFF1;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 20px;
+                padding: 0 15px;
+                color: #455A64;
+            }
+            QGroupBox:checked {
+                border: 3px solid #455A64;
+                background-color: #CFD8DC;
+            }
+        """)
+
+        layout = QVBoxLayout()
+        layout.setSpacing(12)
+
+        # 说明文字
+        hint = QLabel(
+            "💡 上传你之前写过的测试点文档，AI会分析你的写作风格（层级结构、术语、优先级标注方式等），生成风格一致的测试点")
+        hint.setStyleSheet("color: #37474F; font-size: 12px; font-weight: bold;")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        # 多文件选择
+        file_layout = QHBoxLayout()
+
+        self.ref_paths_input = QLineEdit()
+        self.ref_paths_input.setPlaceholderText("可选择多个文件，用分号分隔...")
+        self.ref_paths_input.setMinimumHeight(32)
+        self.ref_paths_input.setStyleSheet("""
+            QLineEdit {
+                border: 2px solid #666;
+                border-radius: 5px;
+                padding: 6px;
+                background-color: white;
+                color: #000;
+                font-size: 12px;
+            }
+        """)
+        file_layout.addWidget(self.ref_paths_input)
+
+        self.ref_browse_btn = QPushButton("浏览...")
+        self.ref_browse_btn.setMaximumWidth(80)
+        self.ref_browse_btn.setMinimumHeight(32)
+        self.ref_browse_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #607D8B;
+                color: white;
+                font-weight: bold;
+                border-radius: 5px;
+                border: 2px solid #455A64;
+            }
+            QPushButton:hover {
+                background-color: #455A64;
+            }
+        """)
+        self.ref_browse_btn.clicked.connect(self.browse_reference_files)
+        file_layout.addWidget(self.ref_browse_btn)
+
+        layout.addLayout(file_layout)
+
+        # 粘贴区域
+        paste_label = QLabel("或直接粘贴历史测试点内容：")
+        paste_label.setStyleSheet("color: #000; font-size: 12px; font-weight: bold;")
+        layout.addWidget(paste_label)
+
+        self.ref_text = QTextEdit()
+        self.ref_text.setPlaceholderText(
+            "在此粘贴你之前写的测试点...\n"
+            "支持多个示例，用 --- 分隔\n"
+            "例如：\n"
+            "# 登录模块测试点\n"
+            "## 正常登录\n"
+            "- 输入正确账号密码，点击登录 [P0]\n"
+            "- 验证token正确存储 [P1]\n"
+            "---\n"
+            "# 支付模块测试点\n"
+            "## 微信支付\n"
+            "- 调起微信SDK [P0]\n"
+            "..."
+        )
+        self.ref_text.setMaximumHeight(150)  # 限制高度
+        font = QFont("Menlo", 11) if sys.platform == "darwin" else QFont("Consolas", 10)
+        self.ref_text.setFont(font)
+        self.ref_text.setStyleSheet("""
+            QTextEdit {
+                border: 2px solid #666;
+                border-radius: 6px;
+                padding: 10px;
+                background-color: white;
+                color: #000;
+                font-size: 12px;
+                line-height: 1.4;
+            }
+        """)
+        layout.addWidget(self.ref_text)
+
+        # 风格预览按钮
+        preview_layout = QHBoxLayout()
+        preview_layout.addStretch()
+
+        self.preview_style_btn = QPushButton("🔍 预览分析的风格")
+        self.preview_style_btn.setMinimumHeight(35)
+        self.preview_style_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #78909C;
+                color: white;
+                font-weight: bold;
+                border-radius: 5px;
+                border: 2px solid #546E7A;
+            }
+            QPushButton:hover {
+                background-color: #546E7A;
+            }
+        """)
+        self.preview_style_btn.clicked.connect(self.preview_writing_style)
+        preview_layout.addWidget(self.preview_style_btn)
+
+        layout.addLayout(preview_layout)
+
+        group.setLayout(layout)
+        return group
+
+    def browse_reference_files(self):
+        """浏览多个参考文件 - 支持 XMind"""
+        file_paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "选择历史测试点文档（可多选）",
+            str(Path.home()),
+            "所有支持格式 (*.md *.txt *.docx *.pdf *.xmind);;"
+            "XMind 文件 (*.xmind);;"
+            "文档文件 (*.md *.txt *.docx *.pdf);;"
+            "所有文件 (*.*)"
+        )
+        if file_paths:
+            self.ref_paths_input.setText('; '.join(file_paths))
+            # 统计各类型文件数量
+            xmind_count = sum(1 for p in file_paths if p.endswith('.xmind'))
+            other_count = len(file_paths) - xmind_count
+            msg = f"已选择 {len(file_paths)} 个参考文件"
+            if xmind_count > 0:
+                msg += f"（含 {xmind_count} 个 XMind）"
+            self.statusBar().showMessage(msg, 3000)
+
+    def preview_writing_style(self):
+        """预览分析出的写作风格"""
+        sources = self._get_reference_sources()
+        if not sources:
+            QMessageBox.information(self, "提示", "请先上传或粘贴历史测试点")
+            return
+
+        fetcher = ReferenceFetcher()
+        result = fetcher.fetch_reference_examples(sources)
+
+        style_guide = result.get('style_guide', '未能分析出风格')
+
+        QMessageBox.information(
+            self,
+            "检测到的写作风格",
+            style_guide + "\n\n找到 " + str(len(result.get('examples', []))) + " 个参考示例"
+        )
+
+    def _get_reference_sources(self) -> List[str]:
+        """获取所有参考来源"""
+        sources = []
+
+        # 文件路径
+        paths_text = self.ref_paths_input.text().strip()
+        if paths_text:
+            sources.extend([p.strip() for p in paths_text.split(';') if p.strip()])
+
+        # 粘贴的文本（按 --- 分割多个示例）
+        pasted = self.ref_text.toPlainText().strip()
+        if pasted:
+            examples = [ex.strip() for ex in pasted.split('---') if ex.strip()]
+            sources.extend(examples)
+
+        return sources
+
+
     def _create_result_group(self) -> QGroupBox:
         """创建结果展示区域"""
         group = QGroupBox("📋 生成结果（可直接编辑）")
@@ -831,7 +1094,8 @@ class TestPointGeneratorApp(QMainWindow):
         index = self.ai_combo.findData(provider)
         if index >= 0:
             self.ai_combo.setCurrentIndex(index)
-        self.on_model_changed(index if index >= 0 else 0)
+        self.on_provider_changed(index if index >= 0 else 0)
+
 
     def on_model_changed(self, index):
         """切换模型时更新"""
@@ -921,7 +1185,7 @@ class TestPointGeneratorApp(QMainWindow):
     # ============ 生成控制 ============
 
     def start_generation(self):
-        """开始生成测试点"""
+        """开始生成测试点 - 修复版"""
         api_key = self.api_key_input.text().strip()
         if not api_key:
             QMessageBox.warning(self, "错误", "请先配置API Key！")
@@ -936,19 +1200,29 @@ class TestPointGeneratorApp(QMainWindow):
 
         self.save_config()
 
+        # 创建AI客户端
         ai_client = self.config.get_ai_client()
         if not ai_client:
             QMessageBox.critical(self, "配置错误", "无法初始化AI客户端")
             return
 
+        # 创建生成器
         analyzer = RequirementAnalyzer()
         self.generator = TestPointGenerator(ai_client, analyzer)
 
+        # 设置参考示例（修复：在创建generator之后调用）
+        reference_sources = self._get_reference_sources()
+        if reference_sources:
+            self.generator.set_reference_examples(reference_sources)
+            self.statusBar().showMessage(f"已加载 {len(reference_sources)} 个风格参考示例...", 2000)
+
+        # 创建工作线程
         self.worker = GenerationWorker(self.generator, req_content, prd_content)
         self.worker.signals.progress.connect(self.update_progress)
         self.worker.signals.finished.connect(self.generation_finished)
         self.worker.signals.error.connect(self.generation_error)
 
+        # UI状态更新
         self.generate_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
         self.export_xmind_btn.setEnabled(False)

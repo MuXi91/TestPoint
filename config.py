@@ -15,14 +15,11 @@ class Config:
             "free_quota": "2000万Tokens",
             "default_model": "Qwen/Qwen2.5-72B-Instruct",  # 改用Qwen，DeepSeek容易403
             "recommended_models": [
+                "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
                 "Qwen/Qwen2.5-72B-Instruct",  # 最稳定，推荐
                 "Qwen/Qwen2.5-32B-Instruct",
-                "THUDM/glm-4-9b-chat",
+                "THUDM/GLM-Z1-32B-0414",
                 "01-ai/Yi-1.5-34B-Chat",
-            ],
-            "unstable_models": [  # 容易403的模型
-                "deepseek-ai/DeepSeek-V3",
-                "deepseek-ai/DeepSeek-R1",
             ]
         },
         "openrouter": {

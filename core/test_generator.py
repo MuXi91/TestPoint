@@ -1,15 +1,24 @@
-from typing import Iterator, Optional
+# test_generator.py
+from typing import Iterator, Optional, List
 from core.analyzer import RequirementAnalyzer
 from document_fetchers.local_fetcher import LocalDocumentFetcher
-from document_fetchers.lanhu_fetcher import LanhuFetcher  # 新的蓝湖获取
+from document_fetchers.lanhu_fetcher import LanhuFetcher
+from document_fetchers.reference_fetcher import ReferenceFetcher, format_examples_for_prompt  # 新增
 
 
 class TestPointGenerator:
     def __init__(self, ai_client, analyzer: Optional[RequirementAnalyzer] = None):
         self.ai_client = ai_client
         self.analyzer = analyzer or RequirementAnalyzer()
-        self.req_fetcher = LocalDocumentFetcher()  # 需求文档读取器
-        self.prd_fetcher = LanhuFetcher()  # PRD读取器（支持蓝湖URL/本地文件/文本）
+        self.req_fetcher = LocalDocumentFetcher()
+        self.prd_fetcher = LanhuFetcher()
+        self.reference_fetcher = ReferenceFetcher()  # 新增
+        self.reference_examples = None  # 缓存参考示例
+
+    def set_reference_examples(self, reference_sources: List[str]):
+        """设置历史测试点参考"""
+        if reference_sources:
+            self.reference_examples = self.reference_fetcher.fetch_reference_examples(reference_sources)
 
     def generate(self, requirement: str, prd: str, stream: bool = True) -> Iterator[str]:
         """生成测试点"""
@@ -69,15 +78,25 @@ class TestPointGenerator:
             return source
 
     def _build_enhanced_prompt(self, req: str, prd: str, analysis: dict) -> str:
-        """构建增强提示"""
-        context = f"""
+        """构建增强提示 - 加入风格参考"""
+        context_parts = []
+
+        # 1. 预分析结果
+        context_parts.append(f"""
 预分析结果：
 - 识别到 {len(analysis.get('modules', []))} 个功能模块
 - 发现 {len(analysis.get('user_stories', []))} 个用户故事  
 - 提取到 {len(analysis.get('business_rules', []))} 条业务规则
 - 识别到 {len(analysis.get('ui_components', []))} 个UI组件
 - 风险提醒: {', '.join(analysis.get('risk_areas', [])) or '无'}
+""")
 
-请基于以上上下文生成更精准的测试点。
-"""
+        # 2. 风格参考（新增）
+        if self.reference_examples:
+            style_section = format_examples_for_prompt(self.reference_examples, max_chars=6000)
+            context_parts.append(
+                f"\n\n{style_section}\n\n【重要】生成要求：严格模仿上述示例的写作风格、层级结构、术语使用和标注习惯。")
+
+        context = '\n'.join(context_parts)
+
         return f"{context}\n\n需求文档：\n{req}\n\nPRD文档：\n{prd}"

@@ -6,6 +6,8 @@ from pathlib import Path
 import zipfile
 import os
 import shutil
+import tempfile
+import time
 
 
 class XMindExporter:
@@ -16,8 +18,17 @@ class XMindExporter:
 
     def export_from_markdown(self, markdown_content: str, output_path: str):
         """从Markdown生成XMind文件 - 使用稳定方法"""
-        # 创建工作簿
-        workbook = xmind.load("template.xmind")
+        # 创建工作簿 - 使用临时路径，让xmind库自动创建新的工作簿
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.xmind', delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
+            workbook = xmind.load(tmp_path)
+        finally:
+            # 清理临时文件
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
         # 获取主画布
         sheet = workbook.getPrimarySheet()
@@ -43,8 +54,8 @@ class XMindExporter:
             if level == 0 or not title:
                 continue
 
-            # 创建新主题
-            new_topic = TopicElement()
+            # 创建新主题 - 必须传入 ownerWorkbook
+            new_topic = TopicElement(ownerWorkbook=workbook)
             new_topic.setTitle(title)
 
             # 找到父主题（弹出高级别主题）
@@ -92,19 +103,21 @@ class XMindExporter:
         """安全保存，尝试多种方法"""
         errors = []
 
-        # 方法1: 标准saver
+        # 方法1: 使用 WorkbookSaver 类
         try:
-            saver.save(workbook, output_path)
+            from xmind.core.saver import WorkbookSaver
+            saver_obj = WorkbookSaver(workbook)
+            saver_obj.save(output_path)
             return
         except Exception as e:
-            errors.append(f"saver.save: {e}")
+            errors.append(f"WorkbookSaver.save: {e}")
 
-        # 方法2: workbook.save
+        # 方法2: 使用 xmind.save 函数
         try:
-            workbook.save(output_path)
+            xmind.save(workbook, output_path)
             return
         except Exception as e:
-            errors.append(f"workbook.save: {e}")
+            errors.append(f"xmind.save: {e}")
 
         # 方法3: 手动构建XMind文件（ZIP格式）
         try:
@@ -175,9 +188,11 @@ class XMindExporter:
         # 尝试获取内部DOM
         try:
             # 访问workbook的document
-            if hasattr(workbook, 'getOwnerDocument'):
-                doc = workbook.getOwnerDocument()
-                return doc.toxml(encoding='utf-8')
+            doc = workbook.getOwnerDocument()
+            xml_bytes = doc.toxml(encoding='utf-8')
+            if isinstance(xml_bytes, bytes):
+                return xml_bytes.decode('utf-8')
+            return xml_bytes
         except:
             pass
 
@@ -226,6 +241,3 @@ class XMindExporter:
 </xmap-content>
 '''
         return xml
-
-
-import time
