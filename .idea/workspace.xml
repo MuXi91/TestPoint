@@ -5,17 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="581b6af0-bd69-4460-8c90-5a926e5c3851" name="更改" comment="">
-      <change afterPath="$PROJECT_DIR$/document_fetchers/reference_fetcher.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/dbnavigator.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dbnavigator.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api_clients/deepseek_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/api_clients/deepseek_client.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api_clients/openrouter_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/api_clients/openrouter_client.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api_clients/siliconflow_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/api_clients/siliconflow_client.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api_clients/zhipu_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/api_clients/zhipu_client.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/config.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/core/test_generator.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/test_generator.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/document_fetchers/lanhu_fetcher.py" beforeDir="false" afterPath="$PROJECT_DIR$/document_fetchers/lanhu_fetcher.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
