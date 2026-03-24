@@ -206,6 +206,35 @@ class LocalDocumentFetcher:
                 results[str(path)] = f"ERROR: {e}"
         return results
 
+    def fetch_and_merge(self, paths_str: str, separator: str = "\n\n---\n\n") -> str:
+        """
+        读取并合并多个文件
+        :param paths_str: 文件路径字符串，多个路径用分号分隔
+        :param separator: 文件内容之间的分隔符
+        :return: 合并后的文档内容
+        """
+        # 检查是否是多文件（包含分号分隔符）
+        if ';' in paths_str:
+            paths = [p.strip() for p in paths_str.split(';') if p.strip()]
+        elif '；' in paths_str:  # 中文分号
+            paths = [p.strip() for p in paths_str.split('；') if p.strip()]
+        else:
+            # 单文件，直接返回
+            return self.fetch(paths_str)
+
+        # 多文件处理
+        contents = []
+        for i, path in enumerate(paths, 1):
+            try:
+                content = self.fetch(path)
+                # 添加文件名标识
+                file_name = Path(path).name
+                contents.append(f"【文档{i}: {file_name}】\n{content}")
+            except Exception as e:
+                contents.append(f"【文档{i}: {path}】\n读取失败: {e}")
+
+        return separator.join(contents)
+
 
 # 便捷函数
 def read_document(file_path: Union[str, Path]) -> str:

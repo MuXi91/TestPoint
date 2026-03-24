@@ -51,7 +51,7 @@ class Config:
         self.zhipu_key = ""
         self.openrouter_key = ""
         self.default_ai = "siliconflow"  # 默认使用硅基流动
-        self.siliconflow_model = "Qwen/Qwen2.5-72B-Instruct"  # 默认模型
+        self.siliconflow_model = "Qwen/Qwen2.5-72B-Instruct"  # 默认模型（推理能力最强）
         self.deepseek_model = "deepseek-chat"
         self.zhipu_model = "glm-4-flash"
         self.openrouter_model = "google/gemma-2-9b-it:free"

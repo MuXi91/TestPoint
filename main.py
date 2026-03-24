@@ -509,7 +509,7 @@ class TestPointGeneratorApp(QMainWindow):
         req_layout.setContentsMargins(15, 15, 15, 15)
         req_layout.setSpacing(12)
 
-        # 文件选择
+        # 文件选择 - 支持多文件
         req_file_layout = QHBoxLayout()
         req_file_layout.setSpacing(10)
 
@@ -518,7 +518,7 @@ class TestPointGeneratorApp(QMainWindow):
         req_file_layout.addWidget(req_label)
 
         self.req_path_input = QLineEdit()
-        self.req_path_input.setPlaceholderText("点击浏览选择文件，或输入路径...")
+        self.req_path_input.setPlaceholderText("点击浏览选择文件，或输入路径（多文件用分号分隔）...")
         self.req_path_input.setMinimumHeight(32)
         self.req_path_input.setStyleSheet("""
             QLineEdit {
@@ -550,10 +550,16 @@ class TestPointGeneratorApp(QMainWindow):
                 background-color: #F57C00;
             }
         """)
-        self.req_browse_btn.clicked.connect(lambda: self.browse_file(self.req_path_input))
+        # 修改为调用多文件浏览
+        self.req_browse_btn.clicked.connect(self.browse_req_files)
         req_file_layout.addWidget(self.req_browse_btn)
 
         req_layout.addLayout(req_file_layout)
+
+        # 添加多文件提示
+        req_multi_hint = QLabel("💡 支持多文件：可一次选择多个需求文档，自动合并处理")
+        req_multi_hint.setStyleSheet("color: #E65100; font-size: 11px; font-weight: bold;")
+        req_layout.addWidget(req_multi_hint)
 
         # 文本输入标签
         req_text_label = QLabel("或直接粘贴内容：")
@@ -706,6 +712,18 @@ class TestPointGeneratorApp(QMainWindow):
         if file_paths:
             self.prd_path_input.setText('; '.join(file_paths))
             self.statusBar().showMessage(f"已选择 {len(file_paths)} 个PRD文件", 3000)
+
+    def browse_req_files(self):
+        """浏览多个需求文档文件"""
+        file_paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "选择需求文档（可多选）",
+            str(Path.home()),
+            "文档文件 (*.md *.txt *.docx *.pdf *.doc *.html *.htm);;所有文件 (*.*)"
+        )
+        if file_paths:
+            self.req_path_input.setText('; '.join(file_paths))
+            self.statusBar().showMessage(f"已选择 {len(file_paths)} 个需求文档", 3000)
 
 
     def _create_button_layout(self) -> QHBoxLayout:

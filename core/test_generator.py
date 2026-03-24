@@ -49,7 +49,7 @@ class TestPointGenerator:
         print(message)  # 默认打印，GUI中会覆盖
 
     def _get_requirement_content(self, source: str) -> str:
-        """获取需求文档内容（本地文件或纯文本）"""
+        """获取需求文档内容（支持多文件或纯文本）"""
         source = source.strip()
         if not source:
             return ""
@@ -59,7 +59,8 @@ class TestPointGenerator:
             return source
 
         try:
-            return self.req_fetcher.fetch(source)
+            # 支持多文件（分号分隔）
+            return self.req_fetcher.fetch_and_merge(source)
         except Exception as e:
             print(f"警告：读取需求文档失败({e})，作为纯文本处理")
             return source
@@ -83,15 +84,26 @@ class TestPointGenerator:
 
         # 1. 预分析结果
         context_parts.append(f"""
-预分析结果：
-- 识别到 {len(analysis.get('modules', []))} 个功能模块
-- 发现 {len(analysis.get('user_stories', []))} 个用户故事  
-- 提取到 {len(analysis.get('business_rules', []))} 条业务规则
-- 识别到 {len(analysis.get('ui_components', []))} 个UI组件
-- 风险提醒: {', '.join(analysis.get('risk_areas', [])) or '无'}
+【文档分析结果】
+- 功能模块数量：{len(analysis.get('modules', []))} 个
+- 用户故事数量：{len(analysis.get('user_stories', []))} 个
+- 业务规则数量：{len(analysis.get('business_rules', []))} 条
+- UI组件数量：{len(analysis.get('ui_components', []))} 个
+- 数据流程数量：{len(analysis.get('data_flows', []))} 个
+- 风险提醒：{', '.join(analysis.get('risk_areas', [])) or '无'}
 """)
 
-        # 2. 风格参考（新增）
+        # 2. 模块列表（帮助模型逐个覆盖）
+        if analysis.get('modules'):
+            modules_str = '\n'.join([f"  - {m}" for m in analysis['modules'][:20]])
+            context_parts.append(f"\n【识别到的功能模块】\n{modules_str}\n")
+
+        # 3. 业务规则列表
+        if analysis.get('business_rules'):
+            rules_str = '\n'.join([f"  - {r}" for r in analysis['business_rules'][:15]])
+            context_parts.append(f"\n【业务规则】\n{rules_str}\n")
+
+        # 4. 风格参考（新增）
         if self.reference_examples:
             style_section = format_examples_for_prompt(self.reference_examples, max_chars=6000)
             context_parts.append(
