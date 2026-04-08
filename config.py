@@ -23,6 +23,19 @@ class Config:
                 "01-ai/Yi-1.5-34B-Chat",
             ]
         },
+        "claude_cli": {
+            "name": "Claude CLI (本地)",
+            "url": "",
+            "key_format": "无需API Key",
+            "free_quota": "本地调用",
+            "default_model": "glm-5",
+            "recommended_models": [
+                "glm-5",
+                "kimi-k2.5",
+                "claude-sonnet-4-6",
+                "claude-opus-4-6",
+            ]
+        },
         "openrouter": {
             "name": "OpenRouter (备用)",
             "url": "https://openrouter.ai",
@@ -55,6 +68,7 @@ class Config:
         self.deepseek_model = "deepseek-chat"
         self.zhipu_model = "glm-4-flash"
         self.openrouter_model = "google/gemma-2-9b-it:free"
+        self.claude_cli_model = "glm-5"  # Claude CLI 默认模型
         # 加载配置（优先级：.zshrc > 配置文件）
         self.load()  # 第一步：从配置文件读取（作为默认值）
         self._load_from_env()  # 第二步：从环境变量/.zshrc读取（覆盖配置文件）
@@ -134,6 +148,7 @@ class Config:
                 "deepseek_model": self.deepseek_model,
                 "zhipu_model": self.zhipu_model,
                 "openrouter_model": self.openrouter_model,
+                "claude_cli_model": self.claude_cli_model,
             }
 
             with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
@@ -156,6 +171,9 @@ class Config:
         elif self.default_ai == "openrouter" and self.openrouter_key:
             from api_clients.openrouter_client import OpenRouterClient
             return OpenRouterClient(self.openrouter_key, self.openrouter_model)
+        elif self.default_ai == "claude_cli":
+            from api_clients.claude_cli_client import ClaudeCLIClient
+            return ClaudeCLIClient(model=self.claude_cli_model)
         return None
 
     def get_key(self, provider: str) -> str:

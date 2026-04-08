@@ -6,13 +6,7 @@
   <component name="ChangeListManager">
     <list default="true" id="581b6af0-bd69-4460-8c90-5a926e5c3851" name="更改" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api_clients/deepseek_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/api_clients/deepseek_client.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api_clients/openrouter_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/api_clients/openrouter_client.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api_clients/siliconflow_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/api_clients/siliconflow_client.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api_clients/zhipu_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/api_clients/zhipu_client.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/config.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/core/test_generator.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/test_generator.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/document_fetchers/local_fetcher.py" beforeDir="false" afterPath="$PROJECT_DIR$/document_fetchers/local_fetcher.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -52,7 +46,8 @@
     &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
     &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;Errors&quot;
+    &quot;last_opened_file_path&quot;: &quot;/Users/mac/PycharmProjects/TestPoint&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;
   }
 }</component>
   <component name="RecentsManager">

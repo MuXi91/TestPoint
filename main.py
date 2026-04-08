@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QFileDialog, QMessageBox, QProgressBar, QGroupBox,
     QSplitter, QFrame, QScrollArea, QSizePolicy
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QObject, QThread
+from PyQt6.QtCore import Qt, pyqtSignal, QThread
 from PyQt6.QtGui import QFont, QColor, QPalette
 
 from config import Config
@@ -22,32 +22,27 @@ from exporters.markdown_exporter import MarkdownExporter
 from document_fetchers.local_fetcher import LocalDocumentFetcher
 
 
-# ============ 信号类 ============
-
-class WorkerSignals(QObject):
-    """工作线程信号"""
-    progress = pyqtSignal(str)
-    finished = pyqtSignal(str)
-    error = pyqtSignal(str)
-
-
 # ============ 工作线程类 ============
 
 class GenerationWorker(QThread):
     """测试点生成工作线程"""
+    # 将信号定义为类属性，避免线程安全问题
+    progress = pyqtSignal(str)
+    finished = pyqtSignal(str)
+    error = pyqtSignal(str)
 
     def __init__(self, generator: TestPointGenerator, req_source: str, prd_source: str):
         super().__init__()
         self.generator = generator
         self.req_source = req_source
         self.prd_source = prd_source
-        self.signals = WorkerSignals()
         self._is_running = True
 
     def run(self):
         """执行生成任务"""
+        import traceback
         try:
-            self.signals.progress.emit("正在分析文档...")
+            self.progress.emit("正在分析文档...")
 
             result_parts = []
             char_count = 0
@@ -60,14 +55,15 @@ class GenerationWorker(QThread):
                 char_count += len(chunk)
 
                 if char_count % 500 == 0:
-                    self.signals.progress.emit(f"已生成 {char_count} 字符...")
+                    self.progress.emit(f"已生成 {char_count} 字符...")
 
             if self._is_running:
                 full_result = "".join(result_parts)
-                self.signals.finished.emit(full_result)
+                self.finished.emit(full_result)
 
         except Exception as e:
-            self.signals.error.emit(str(e))
+            error_detail = f"{str(e)}\n\n堆栈信息:\n{traceback.format_exc()[:1000]}"
+            self.error.emit(error_detail)
 
     def stop(self):
         """停止生成"""
@@ -432,6 +428,14 @@ class TestPointGeneratorApp(QMainWindow):
                 ("Qwen/Qwen2.5-32B-Instruct", "通义千问2.5-32B"),
                 ("THUDM/GLM-Z1-32B-0414", "智谱GLM-Z1-32B-0414"),
                 ("01-ai/Yi-1.5-34B-Chat", "零一万物Yi-1.5-34B"),
+            ]
+        elif provider == "claude_cli":
+            # Claude CLI 本地模型
+            models = [
+                ("glm-5", "GLM-5（推荐）"),
+                ("kimi-k2.5", "Kimi K2.5"),
+                ("claude-sonnet-4-6", "Claude Sonnet 4.6"),
+                ("claude-opus-4-6", "Claude Opus 4.6"),
             ]
         elif provider == "openrouter":
             # OpenRouter模型列表（2024年3月）
@@ -1147,6 +1151,17 @@ class TestPointGeneratorApp(QMainWindow):
         api_key = self.api_key_input.text().strip()
         selected_model = self.model_combo.currentData() if self.model_combo.count() > 0 else None
 
+        # Claude CLI 不需要 API Key
+        if provider == "claude_cli":
+            if selected_model:
+                self.config.claude_cli_model = selected_model
+            self.config.default_ai = provider
+            self.config.save()
+            QMessageBox.information(self, "保存成功",
+                                    f"已保存 Claude CLI 配置！\n"
+                                    f"模型：{selected_model or 'glm-5'}")
+            return
+
         if not api_key:
             QMessageBox.warning(self, "提示", "请输入API Key")
             return
@@ -1204,10 +1219,14 @@ class TestPointGeneratorApp(QMainWindow):
 
     def start_generation(self):
         """开始生成测试点 - 修复版"""
-        api_key = self.api_key_input.text().strip()
-        if not api_key:
-            QMessageBox.warning(self, "错误", "请先配置API Key！")
-            return
+        provider = self.ai_combo.currentData()
+
+        # Claude CLI 不需要 API Key
+        if provider != "claude_cli":
+            api_key = self.api_key_input.text().strip()
+            if not api_key:
+                QMessageBox.warning(self, "错误", "请先配置API Key！")
+                return
 
         try:
             req_content = self.get_input_content(self.req_path_input, self.req_text)
@@ -1236,9 +1255,9 @@ class TestPointGeneratorApp(QMainWindow):
 
         # 创建工作线程
         self.worker = GenerationWorker(self.generator, req_content, prd_content)
-        self.worker.signals.progress.connect(self.update_progress)
-        self.worker.signals.finished.connect(self.generation_finished)
-        self.worker.signals.error.connect(self.generation_error)
+        self.worker.progress.connect(self.update_progress)
+        self.worker.finished.connect(self.generation_finished)
+        self.worker.error.connect(self.generation_error)
 
         # UI状态更新
         self.generate_btn.setEnabled(False)
