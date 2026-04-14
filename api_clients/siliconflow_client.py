@@ -1,10 +1,16 @@
 import requests
 import json
 from typing import Iterator
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+import urllib3
+
+# 禁用SSL警告（仅用于解决特定SSL连接问题）
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class SiliconFlowClient:
-    """硅基流动客户端 - 修复403错误"""
+    """硅基流动客户端 - 修复403错误和SSL连接问题"""
 
     API_BASE = "https://api.siliconflow.cn/v1"
 
@@ -32,6 +38,17 @@ class SiliconFlowClient:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+
+        # 创建带有重试策略的 session，解决 SSL 连接问题
+        self.session = requests.Session()
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[500, 502, 503, 504],
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("https://", adapter)
+
         print(f"硅基流动使用模型: {self.model}")
 
     def generate_test_points(self, requirement: str, prd: str) -> Iterator[str]:
@@ -54,7 +71,7 @@ class SiliconFlowClient:
         }
 
         try:
-            response = requests.post(
+            response = self.session.post(
                 f"{self.API_BASE}/chat/completions",
                 headers=self.headers,
                 json=payload,
@@ -172,8 +189,6 @@ class SiliconFlowClient:
 - `[UI]` - 界面视觉测试
 - `[UX]` - 用户体验测试
 - `[兼容]` - Android/iOS/H5/Web兼容
-- `[安全]` - 安全性测试
-- `[性能]` - 性能相关测试
 
 ## 4. 优先级标注规则
 - **P0**：核心功能、阻断性bug、数据安全问题
@@ -184,6 +199,7 @@ class SiliconFlowClient:
 - **禁止使用 BDD 词汇**：不要出现 Given、When、Then、given、when、then 等词汇
 - **禁止写测试步骤**：直接写测试点，不要写成"步骤1、步骤2"格式
 - **简洁直接**：每个测试点用一句话描述测试内容，例如"验证登录按钮点击后跳转正确"
+- **注意**:不要把其他不相关的需求加到这次需求中
 
 ---
 
@@ -202,33 +218,16 @@ class SiliconFlowClient:
 - 操作异常：快速点击、重复提交、并发操作
 
 ## 兼容性测试
-- Android：不同版本、不同品牌、不同分辨率
-- iOS：不同版本、不同机型
-- H5：不同浏览器
-- 多端同步：同一账号多设备登录
+- Android，iOS，H5，浏览器上的展示
+
 
 ## UI/UX测试
 - 布局样式：符合设计稿
 - 交互反馈：加载状态、成功/失败提示
 - 文案显示：英文文案正确、无截断
 
-## 安全测试
-- 输入验证：注入防护
-- 权限控制：越权访问
-- 敏感数据：加密存储传输
-
-## 性能测试
-- 响应时间：接口响应、页面加载
-- 稳定性：内存泄漏、崩溃
-
 ---
-
-# 输出检查清单（生成后自查）
-1. ✅ 需求文档每个功能点都有覆盖？
-2. ✅ 没有重复或相似的测试点？
-3. ✅ 每个测试点都标注了优先级？
-4. ✅ 每个测试点都标注了测试类型？
-5. ✅ 边界值和异常场景都考虑了？"""
+"""
 
     def _build_prompt(self, requirement: str, prd: str) -> str:
         req = requirement[:20000] if len(requirement) > 20000 else requirement
@@ -261,9 +260,8 @@ class SiliconFlowClient:
 1. [功能] 正常流程
 2. [边界] 边界值测试
 3. [异常] 异常场景
-4. [兼容] 多端兼容
+4. [兼容] Android，iOS，H5，浏览器上的展示
 5. [UI] 界面验证
-6. [安全] 安全检查
 
 ### 步骤3：去重检查
 - 合并含义相同的测试点
@@ -286,7 +284,7 @@ class SiliconFlowClient:
         }
 
         try:
-            resp = requests.post(
+            resp = self.session.post(
                 f"{self.API_BASE}/chat/completions",
                 headers=self.headers,
                 json=payload,

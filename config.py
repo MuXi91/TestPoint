@@ -11,7 +11,7 @@ class Config:
     FREE_MODELS = {
         "siliconflow": {
             "name": "硅基流动 (稳定)",
-            "url": "https://cloud.siliconflow.cn",
+            "url": "https://cloud.siliconflow.com",
             "key_format": "sk-xxxxxx",
             "free_quota": "2000万Tokens",
             "default_model": "Qwen/Qwen2.5-72B-Instruct",  # 改用Qwen，DeepSeek容易403
