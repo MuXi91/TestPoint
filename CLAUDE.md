@@ -2,23 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+##项目概述
 
-TestPoint is a PyQt6 desktop application that generates test points from requirement documents and PRD documents using AI APIs. It supports multiple AI providers (SiliconFlow, DeepSeek, Zhipu, OpenRouter) and can export results to XMind or Markdown format.
+TestPoint是一个PyQt6桌面应用程序，它使用AI api从需求文档和PRD文档生成测试点。它支持多个AI提供商（SiliconFlow, DeepSeek, Zhipu, OpenRouter），并可以将结果导出到XMind或Markdown格式。
+# #命令
 
-## Commands
-
-```bash
-# Run the application
+”“bash
+#运行应用程序
 python main.py
 
-# Install dependencies
-pip install -r requirements.txt
+#安装依赖项
+PIP install -r requirements.txt
 
-# Run tests
-python test.py
+#运行测试
 python test_api.py
-```
+' ' '
 
 ## Architecture
 
@@ -46,44 +44,44 @@ python test_api.py
 └───────────────┘
 ```
 
-### Key Modules
+关键模块
 
-- **config.py**: Manages API keys and model configuration. Loads from environment variables first, then config file (`~/.test_generator_config.json`).
+—**config.py**：管理API密钥和模型配置。首先从环境变量加载，然后从配置文件（' ~/.test_generator_config.json '）加载。
 
-- **api_clients/**: AI provider implementations. Each client has `generate_test_points(requirement, prd)` returning a streaming iterator. SiliconFlow is the default provider.
+**api_clients/**: AI提供程序实现。每个客户端都有‘ generate_test_points(requirement, prd) ’返回一个流迭代器。SiliconFlow是默认的提供程序。
 
-- **core/test_generator.py**: Main orchestration logic. Coordinates document fetching, analysis, and AI generation.
+—**core/test_generator.py**：主业务流程逻辑。协调文档获取、分析和AI生成。
 
-- **core/analyzer.py**: Pre-analyzes documents to extract modules, user stories, business rules, and UI components.
+- **core/analyzer.py**：预分析文档以提取模块、用户故事、业务规则和UI组件。
 
-- **document_fetchers/**: Fetches content from various sources:
-  - `local_fetcher.py`: Local files (.md, .txt, .docx, .pdf)
-  - `lanhu_fetcher.py`: Lanhu (蓝湖) URLs via Selenium
-  - `reference_fetcher.py`: Reference examples for style matching
+**document_fetchers/**：从各种来源获取内容：
+- ' local_fetcher.py '：本地文件.Md、.txt、.docx、.pdf)
+- ' lanhu_fetcher.py '：通过Selenium获取Lanhu的url
+- ' reference_fetcher.py '：样式匹配的参考示例
 
-- **exporters/**: Output formatting:
-  - `xmind_exporter.py`: XMind format (ZIP containing content.xml, styles.xml, comments.xml)
-  - `markdown_exporter.py`: Markdown and OPML formats
+- **出口商/**：输出格式：
+- ' xmind_export .py ': XMind格式（ZIP包含content.xml, styles.xml, comments.xml）
+- ' markdown_exporters .py ': Markdown和OPML格式
 
-### Data Flow
+###数据流
 
-1. User provides requirement source (file path or text) and PRD source (Lanhu URL, file, or text)
-2. Document fetchers extract content from sources
-3. Analyzer pre-processes documents
-4. AI client generates test points via streaming API
-5. Results displayed in GUI, exportable to XMind/Markdown
+1. 用户提供需求源（文件路径或文本）和PRD源（Lanhu URL、文件或文本）
+2. 文档获取器从源提取内容
+3. 分析器预处理文件
+4. AI客户端通过流API生成测试点
+5. 结果显示在GUI中，可导出到XMind/Markdown
 
-## API Configuration
+## API配置
 
-API keys can be set via:
-1. Environment variables: `SILICONFLOW_KEY`, `DEEPSEEK_KEY`, `ZHIPU_KEY`, `OPENROUTER_KEY`
-2. Config file: `~/.test_generator_config.json`
-3. GUI settings dialog
+API密钥可以通过以下方式设置：
+1. 环境变量：‘ SILICONFLOW_KEY ’， ‘ DEEPSEEK_KEY ’
+2. 配置文件：‘ ~/.test_generator_config.json ’
+3. GUI设置对话框
 
-Default AI provider: SiliconFlow with model `Qwen/Qwen2.5-72B-Instruct`
+默认AI提供商：SiliconFlow模型‘ Qwen/Qwen2.5-72B-Instruct ’
 
-## XMind Export Notes
+## XMind导出笔记
 
-The xmind library requires `ownerWorkbook` parameter when creating `TopicElement`:
+xmind库在创建“TopicElement”时需要“ownerWorkbook”参数：
 
-Save using `xmind.save()` or `WorkbookSaver` class, not `saver.save()`.
+使用xmind保存。save() ‘或’ WorkbookSaver ‘类，而不是’ save .save() '。

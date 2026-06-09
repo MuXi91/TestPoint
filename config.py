@@ -165,12 +165,6 @@ class Config:
         elif self.default_ai == "deepseek" and self.deepseek_key:
             from api_clients.deepseek_client import DeepSeekClient
             return DeepSeekClient(self.deepseek_key)
-        elif self.default_ai == "zhipu" and self.zhipu_key:
-            from api_clients.zhipu_client import ZhipuClient
-            return ZhipuClient(self.zhipu_key)
-        elif self.default_ai == "openrouter" and self.openrouter_key:
-            from api_clients.openrouter_client import OpenRouterClient
-            return OpenRouterClient(self.openrouter_key, self.openrouter_model)
         elif self.default_ai == "claude_cli":
             from api_clients.claude_cli_client import ClaudeCLIClient
             return ClaudeCLIClient(model=self.claude_cli_model)
