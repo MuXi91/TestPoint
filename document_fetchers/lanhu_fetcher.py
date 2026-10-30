@@ -1,6 +1,7 @@
 # lanhu_fetcher.py
 import re
 import json
+import hashlib
 import time
 import sys
 import warnings
@@ -117,6 +118,8 @@ class LanhuFetcher:
 
             except Exception as e:
                 print(f"    ✗ 读取失败: {e}")
+                if self._is_lanhu_url(path):
+                    raise RuntimeError(f"蓝湖PRD读取失败: {e}") from e
                 # 继续处理其他文件，不中断
                 continue
 
@@ -267,9 +270,372 @@ class LanhuFetcher:
             raise Exception(f"读取Word文档失败: {e}")
 
     def _fetch_from_url(self, url: str) -> str:
-        """从蓝湖URL获取（占位，实际实现需要蓝湖API）"""
-        # 这里可以实现蓝湖API调用
-        return f"# 蓝湖URL内容\n暂不支持直接解析蓝湖URL，请导出PDF后上传。\nURL: {url}"
+        """使用持久化的可见 Chrome 会话遍历蓝湖 PRD 页面。"""
+        try:
+            from playwright.sync_api import Error as PlaywrightError
+            from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+            from playwright.sync_api import sync_playwright
+        except ImportError as e:
+            raise RuntimeError(
+                "读取蓝湖链接需要 Playwright。请安装依赖并运行 `playwright install`，"
+                "或导出 PDF/Word 上传。"
+            ) from e
+
+        playwright_runtime = None
+        context = None
+        try:
+            playwright_runtime = sync_playwright().start()
+            profile_dir = Path.home() / ".testpoint_lanhu_chrome"
+            context = playwright_runtime.chromium.launch_persistent_context(
+                user_data_dir=str(profile_dir),
+                channel="chrome",
+                headless=False,
+                viewport=None,
+                args=["--start-maximized"],
+            )
+            page = context.pages[0] if context.pages else context.new_page()
+            page.set_default_timeout(10_000)
+            page.set_default_navigation_timeout(30_000)
+            deadline = time.monotonic() + 15 * 60
+            initial_deadline = deadline
+
+            try:
+                page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            except PlaywrightTimeoutError:
+                pass
+
+            login_markers = (
+                "登录后继续", "请先登录", "登录蓝湖", "扫码登录", "微信登录",
+                "手机号登录", "账号密码", "login to continue", "sign in to continue",
+                "sign in", "log in"
+            )
+            permission_markers = (
+                "无权访问", "没有权限", "权限不足", "邀请已失效", "链接已失效",
+                "access denied", "permission denied", "invitation has expired"
+            )
+            excluded_labels = re.compile(
+                r"分享|导出|删除|设置|反馈|帮助|搜索|通知|评论|share|export|delete|settings|help|search|comment",
+                re.IGNORECASE,
+            )
+
+            def get_body_text() -> str:
+                return page.locator("body").inner_text(timeout=5_000).strip()
+
+            def get_prd_text() -> str:
+                frame_contents = []
+                for frame in page.frames:
+                    if frame == page.main_frame:
+                        continue
+                    try:
+                        body = frame.locator("xpath=/html/body")
+                        if body.count() == 0:
+                            continue
+                        text = body.evaluate(
+                            """body => {
+                                const clone = body.cloneNode(true);
+                                clone.querySelectorAll(
+                                    'script, style, noscript, svg, nav, header, footer, button'
+                                ).forEach(el => el.remove());
+                                return clone.innerText || body.innerText || '';
+                            }"""
+                        )
+                    except PlaywrightError:
+                        continue
+                    text = re.sub(r'[\t\r ]+', ' ', text or '')
+                    text = re.sub(r'\n[ \t]*\n[ \t]*\n+', '\n\n', text).strip()
+                    if text:
+                        frame_contents.append((len(text), frame.url, text))
+
+                if not frame_contents:
+                    return ""
+
+                _, frame_url, text = max(frame_contents, key=lambda item: item[0])
+                print(
+                    f"已从蓝湖 iframe 提取 PRD：{len(text)} 字符，frame={frame_url}",
+                    flush=True,
+                )
+                return text
+
+            def check_page_access(body_text: str) -> None:
+                lowered = body_text.lower()
+                if any(marker in lowered for marker in permission_markers):
+                    raise RuntimeError(
+                        "蓝湖权限失败：当前账号无权访问，或邀请链接已失效。"
+                        "请确认邀请权限，或导出 PDF/Word 上传。"
+                    )
+
+            def wait_for_stable_content(wait_deadline: float, previous: str = "") -> str:
+                last_text = previous
+                stable_samples = 0
+                while time.monotonic() < min(wait_deadline, deadline):
+                    try:
+                        body_text = get_body_text()
+                        check_page_access(body_text)
+                        current = get_prd_text()
+                    except PlaywrightTimeoutError:
+                        current = ""
+                    if current and current == last_text:
+                        stable_samples += 1
+                    else:
+                        stable_samples = 0
+                    last_text = current
+                    if len(current) >= 30 and stable_samples >= 2:
+                        return current
+                    time.sleep(min(1, max(0, min(wait_deadline, deadline) - time.monotonic())))
+                return ""
+
+            # Keep the visible browser open while the user authenticates or accepts an invite.
+            print("等待蓝湖登录完成并加载 PRD；请在打开的 Chrome 中完成登录/接受邀请。")
+            text = ""
+            while time.monotonic() < initial_deadline:
+                try:
+                    body_text = get_body_text()
+                    check_page_access(body_text)
+                    lowered = body_text.lower()
+                    login_required = any(marker in lowered for marker in login_markers)
+                    if not login_required:
+                        text = wait_for_stable_content(min(deadline, time.monotonic() + 90))
+                        if text:
+                            print("蓝湖登录/权限检查完成，正文已稳定。")
+                            break
+                    else:
+                        time.sleep(1)
+                        continue
+                except PlaywrightTimeoutError:
+                    pass
+                time.sleep(1)
+
+            if not text:
+                try:
+                    body_text = get_body_text()
+                    check_page_access(body_text)
+                    if any(marker in body_text.lower() for marker in login_markers):
+                        raise RuntimeError(
+                            "蓝湖登录失败：Chrome 中仍显示登录页面。请完成登录/接受邀请后重试。"
+                        )
+                except PlaywrightTimeoutError:
+                    pass
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("蓝湖抓取总时限 15 分钟已耗尽，未能完成登录或加载首个页面。")
+                raise RuntimeError(
+                    "蓝湖登录/初始页面准备超时：请确认已完成登录并接受邀请，且页面具有访问权限。"
+                )
+
+            if not text:
+                raise RuntimeError(
+                    "蓝湖 iframe 中未提取到 PRD 正文，已停止生成测试点，避免使用默认系统文案生成无关内容。"
+                )
+
+            def discover_candidates() -> list:
+                tab_container = page.locator(
+                    "xpath=/html/body/div[1]/div[5]/div[2]/div/div[2]/div[2]/div[1]/div[5]"
+                )
+                scoped_to_tab_container = tab_container.count() > 0
+                if scoped_to_tab_container:
+                    print("已定位蓝湖标签容器，按一级/二级标签遍历。")
+                root = tab_container if scoped_to_tab_container else page.locator("body")
+                elements = root.evaluate(
+                    """(root, scoped) => {
+                        const selector = scoped ? '*' : [
+                            'a', 'button', 'li',
+                            '[role="tab"]', '[role="link"]', '[role="button"]',
+                            '[role="treeitem"]', '[aria-current]', '[data-testid]',
+                            '[class*="tab"]', '[class*="menu"]', '[class*="catalog"]',
+                            '[class*="directory"]', '[class*="tree"]', '[class*="sidebar"]'
+                        ].join(',');
+                        const candidates = [...root.querySelectorAll(selector)];
+                        return candidates.map((el, index) => {
+                            const r = el.getBoundingClientRect();
+                            const style = getComputedStyle(el);
+                            const visible = r.width > 0 && r.height > 0 &&
+                                r.bottom > 0 && r.right > 0 &&
+                                style.visibility !== 'hidden' && style.display !== 'none';
+                            const ownText = [...el.childNodes]
+                                .filter(node => node.nodeType === Node.TEXT_NODE)
+                                .map(node => node.textContent)
+                                .join(' ')
+                                .trim();
+                            const leafText = el.children.length === 0 ? el.innerText : '';
+                            const label = (
+                                ownText || el.getAttribute('aria-label') || el.title || leafText || ''
+                            ).trim().replace(/\\s+/g, ' ');
+                            const metadata = [
+                                el.tagName, el.className, el.getAttribute('role'),
+                                el.getAttribute('aria-label'), el.getAttribute('data-testid')
+                            ].filter(Boolean).join(' ');
+                            const semantic = /tab|tree|menu|nav|catalog|directory|sidebar|目录|章节/i.test(metadata);
+                            const compact = r.height <= 80 && r.width <= Math.max(600, innerWidth * 0.6);
+                            const clickable = scoped || ['A', 'BUTTON', 'LI'].includes(el.tagName) ||
+                                ['button', 'link', 'tab', 'treeitem', 'menuitem'].includes(el.getAttribute('role')) ||
+                                semantic || style.cursor === 'pointer';
+                            const id = el.getAttribute('data-testid') || el.getAttribute('data-id') ||
+                                el.id || el.getAttribute('href') || el.getAttribute('aria-controls') || '';
+                            if (!visible || !clickable || !compact || !label || label.length > 80) return null;
+                            const clickTarget = scoped
+                                ? el.closest('a, button, li, [role="tab"], [role="treeitem"], [role="button"]') || el
+                                : el;
+                            const navId = clickTarget.getAttribute('data-testpoint-nav-id') || `testpoint-${index}`;
+                            clickTarget.setAttribute('data-testpoint-nav-id', navId);
+                            return {navId, label, id};
+                        }).filter(Boolean);
+                    }""",
+                    scoped_to_tab_container,
+                )
+                unique = []
+                seen = set()
+                for element in elements:
+                    key = (element["id"] or element["label"].casefold(), element["label"].casefold())
+                    if key not in seen:
+                        seen.add(key)
+                        unique.append(element)
+                return unique
+
+            candidates = discover_candidates()
+            print(f"发现 {len(candidates)} 个导航候选项。")
+            queued_keys = {
+                (candidate["id"] or candidate["label"].casefold(), candidate["label"].casefold())
+                for candidate in candidates
+            }
+            visited_keys = set()
+            visited_content = set()
+            pages = []
+            errors = []
+            max_pages = 50
+
+            def content_key(page_url: str, label: str, content: str) -> tuple:
+                digest = hashlib.sha256(content[:4000].encode("utf-8")).hexdigest()
+                return page_url, label.casefold(), digest
+
+            def print_extracted_content(label: str, content: str) -> None:
+                separator = "=" * 80
+                print(
+                    f"\n{separator}\n"
+                    f"蓝湖提取内容 | 标签：{label} | 字符数：{len(content)}\n"
+                    f"{separator}\n"
+                    f"{content}\n"
+                    f"{separator}\n",
+                    flush=True,
+                )
+
+            current_url = page.url
+            current_label = "当前页面"
+            pages.append((current_label, text))
+            visited_content.add(hashlib.sha256(text[:4000].encode("utf-8")).hexdigest())
+            visited_keys.add(content_key(current_url, current_label, text))
+            print_extracted_content(current_label, text)
+
+            index = 0
+            while index < len(candidates) and len(pages) < max_pages:
+                if time.monotonic() >= deadline:
+                    print("蓝湖抓取总时限 15 分钟已耗尽，保留已成功读取的页面。")
+                    break
+                candidate = candidates[index]
+                index += 1
+                label = candidate["label"].strip()
+                if not label or excluded_labels.search(label):
+                    continue
+                stable_id = candidate["id"] or label.casefold()
+                key = (stable_id, label.casefold())
+                if key in visited_keys:
+                    continue
+                visited_keys.add(key)
+                print(f"正在读取目录/标签 {len(pages) + 1}: {label}")
+                try:
+                    before_url = page.url
+                    before_text = get_prd_text()
+                    item = page.locator(f'[data-testpoint-nav-id="{candidate["navId"]}"]')
+                    if item.count() == 0:
+                        raise RuntimeError("导航项已失效")
+                    item.first.scroll_into_view_if_needed(timeout=5_000)
+                    item.first.click(timeout=8_000)
+                    switched = False
+                    switch_deadline = min(deadline, time.monotonic() + 30)
+                    while time.monotonic() < switch_deadline:
+                        try:
+                            if page.url != before_url:
+                                switched = True
+                                break
+                            current_body = get_body_text()
+                            check_page_access(current_body)
+                            current_text = get_prd_text()
+                            if current_text and current_text != before_text:
+                                switched = True
+                                break
+                        except PlaywrightTimeoutError:
+                            pass
+                        time.sleep(0.5)
+                    if not switched:
+                        raise RuntimeError("点击后页面状态未变化")
+                    loaded_text = wait_for_stable_content(min(deadline, time.monotonic() + 120))
+                    if not loaded_text:
+                        message = (
+                            "蓝湖抓取总时限 15 分钟已耗尽" if time.monotonic() >= deadline
+                            else "蓝湖 iframe 正文加载超时或内容为空"
+                        )
+                        print(f"目录/标签加载超时 [{label}]：{message}。")
+                        errors.append(f"{label}: {message}")
+                        continue
+                    digest = hashlib.sha256(loaded_text[:4000].encode("utf-8")).hexdigest()
+                    if digest in visited_content:
+                        continue
+                    visited_content.add(digest)
+                    visited_keys.add(content_key(page.url, label, loaded_text))
+                    pages.append((label, loaded_text))
+                    print_extracted_content(label, loaded_text)
+                    # Navigation controls may be rendered lazily after selecting a section.
+                    for discovered in discover_candidates():
+                        candidate_key = (
+                            discovered["id"] or discovered["label"].casefold(),
+                            discovered["label"].casefold(),
+                        )
+                        if candidate_key not in visited_keys and candidate_key not in queued_keys:
+                            queued_keys.add(candidate_key)
+                            candidates.append(discovered)
+                except (PlaywrightTimeoutError, PlaywrightError, RuntimeError) as e:
+                    if isinstance(e, RuntimeError) and str(e).startswith("蓝湖权限失败"):
+                        raise
+                    errors.append(f"{label}: {e}")
+                    print(f"目录/标签读取失败 [{label}]：{e}")
+
+            if not pages:
+                details = "; ".join(errors[:5])
+                raise RuntimeError(f"没有发现有效蓝湖正文。{details}")
+            combined = "\n\n".join(f"## {label}\n\n{content}" for label, content in pages)
+            print(
+                f"\n{'#' * 80}\n"
+                f"最终传给 AI 的蓝湖 PRD 内容 | 共 {len(pages)} 个标签 | {len(combined)} 字符\n"
+                f"{'#' * 80}\n"
+                f"{combined}\n"
+                f"{'#' * 80}\n",
+                flush=True,
+            )
+            print(f"蓝湖 PRD 合并完成：{len(pages)} 个页面，{len(combined)} 字符。")
+            if errors:
+                print(f"有 {len(errors)} 个目录/标签未能读取。")
+            return combined
+        except RuntimeError:
+            raise
+        except PlaywrightTimeoutError as e:
+            raise RuntimeError(
+                "等待蓝湖页面加载超时。请检查网络和登录状态，或导出 PDF/Word 上传。"
+            ) from e
+        except PlaywrightError as e:
+            raise RuntimeError(
+                "无法读取蓝湖页面。请确认 Chrome 可用、网络正常且账号有邀请权限，"
+                "或导出 PDF/Word 上传。"
+            ) from e
+        finally:
+            if context is not None:
+                try:
+                    context.close()
+                except Exception:
+                    pass
+            if playwright_runtime is not None:
+                try:
+                    playwright_runtime.stop()
+                except Exception:
+                    pass
+
 
 
     def _parse_xmind_xml(self, xml_content: str, filename: str) -> str:

@@ -11,6 +11,7 @@ setup(
         "beautifulsoup4>=4.12.0",
         "lark-oapi>=1.0.0",
         "selenium>=4.15.0",
+        "playwright>=1.40.0",
         "openai>=1.0.0",
         "anthropic>=0.8.0",
         "markdown>=3.5.0",

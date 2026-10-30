@@ -5,6 +5,7 @@ python-markdown>=0.1.0
 beautifulsoup4>=4.12.0
 lark-oapi>=1.0.0
 selenium>=4.15.0
+playwright>=1.40.0
 openai>=1.0.0
 python-docx>=0.8.11    # Word .docx
 pdfplumber>=0.9.0      # PDF（推荐，效果好）
